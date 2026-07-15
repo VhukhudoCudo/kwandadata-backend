@@ -20,6 +20,7 @@ const registerSchema = z.object({
   region: z.string().min(1),
   employment: z.string().min(1),
   usedReferralOf: z.string().optional(),
+  role: z.enum(["USER", "ADVERTISER"]).optional(),
 });
 
 function generateReferralCode(first: string, last: string) {
@@ -58,6 +59,7 @@ router.post("/register", async (req, res) => {
       employment: data.employment,
       referralCode: generateReferralCode(data.firstName, data.lastName),
       usedReferralOf: data.usedReferralOf,
+      role: data.role ?? "USER",
       wallet: { create: {} },
     },
   });
@@ -90,6 +92,10 @@ router.post("/login", async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     return res.status(401).json({ error: "Incorrect email or password." });
+  }
+
+  if (user.suspended) {
+    return res.status(403).json({ error: "This account has been suspended. Contact support for assistance." });
   }
 
   const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, {

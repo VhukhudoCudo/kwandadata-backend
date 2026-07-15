@@ -44,6 +44,18 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     return res.status(404).json({ error: "Wallet not found." });
   }
 
+  let campaign = null;
+  if (task.campaignId) {
+    campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
+    if (!campaign || campaign.status !== "active") {
+      return res.status(400).json({ error: "This campaign is no longer active." });
+    }
+    const remaining = Number(campaign.budget) - Number(campaign.spent);
+    if (remaining < Number(task.reward)) {
+      return res.status(400).json({ error: "This campaign's budget has been exhausted." });
+    }
+  }
+
   const reward = Number(task.reward);
   const adminFee = reward * 0.15;
   const dataShare = reward * 0.30;
@@ -70,8 +82,7 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
         amount: walletShare,
       },
     });
-
-    await tx.activityLog.create({
+await tx.activityLog.create({
       data: {
         userId: req.userId!,
         action: "task_completed",
@@ -79,9 +90,28 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
       },
     });
 
+    if (campaign) {
+      const newSpent = Number(campaign.spent) + reward;
+      const isExhausted = newSpent >= Number(campaign.budget);
+
+      await tx.campaign.update({
+        where: { id: campaign.id },
+        data: {
+          spent: newSpent,
+          status: isExhausted ? "completed" : campaign.status,
+        },
+      });
+
+      if (isExhausted) {
+        await tx.task.updateMany({
+          where: { campaignId: campaign.id },
+          data: { active: false },
+        });
+      }
+    }
+
     return updatedWallet;
   });
-
   res.json({
     message: "Task completed!",
     walletShare,
