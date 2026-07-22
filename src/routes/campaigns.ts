@@ -17,8 +17,8 @@ router.post("/", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest
     return res.status(400).json({ error: "budget must be a positive number." });
   }
 
-  const adminFee = budgetNum * 0.15;
-  const vat = (budgetNum + adminFee) * 0.15;
+const adminFee = budgetNum * 0.20;
+  const vat = budgetNum * 0.15;
   const totalCharged = budgetNum + adminFee + vat;
 
   const campaign = await prisma.campaign.create({
@@ -132,6 +132,70 @@ router.patch("/:id/launch", requireAuth, requireRole("ADVERTISER"), async (req: 
   });
 
   res.json({ campaign: updated });
+});
+
+// Billing summary across all of the advertiser's campaigns
+router.get("/billing/summary", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaigns = await prisma.campaign.findMany({
+    where: { advertiserId: req.userId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      budget: true,
+      adminFee: true,
+      vat: true,
+      totalCharged: true,
+      spent: true,
+      createdAt: true,
+    },
+  });
+
+  const totals = campaigns.reduce(
+    (acc, c) => {
+      acc.totalBudget += Number(c.budget);
+      acc.totalAdminFee += Number(c.adminFee);
+      acc.totalVat += Number(c.vat);
+      acc.totalCharged += Number(c.totalCharged);
+      acc.totalSpent += Number(c.spent);
+      return acc;
+    },
+    { totalBudget: 0, totalAdminFee: 0, totalVat: 0, totalCharged: 0, totalSpent: 0 }
+  );
+
+  res.json({ totals, campaigns });
+});
+
+// Detailed statement for a single campaign (must belong to the requesting advertiser)
+router.get("/:id/statement", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: req.params.id },
+    include: { tasks: true },
+  });
+
+  if (!campaign || campaign.advertiserId !== req.userId) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+
+  const spent = Number(campaign.spent);
+  const budget = Number(campaign.budget);
+
+  res.json({
+    statement: {
+      campaignId: campaign.id,
+      title: campaign.title,
+      status: campaign.status,
+      createdAt: campaign.createdAt,
+      budget,
+      adminFee: Number(campaign.adminFee),
+      vat: Number(campaign.vat),
+      totalCharged: Number(campaign.totalCharged),
+      spent,
+      remainingBudget: Math.max(0, budget - spent),
+      taskCount: campaign.tasks.length,
+    },
+  });
 });
 
 export default router;

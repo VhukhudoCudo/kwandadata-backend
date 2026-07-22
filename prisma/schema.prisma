@@ -31,6 +31,11 @@ model User {
   completions     TaskCompletion[]
   redemptions     Redemption[]
   campagins       Campaign[]
+  campaignWallets         CampaignWallet[] @relation("CampaignWalletUser")
+  campaignWalletsSponsored CampaignWallet[] @relation("CampaignWalletAdvertiser")
+  campaignCodes   CampaignCode[]
+  goals           Goal[]
+  goalCodes       GoalCode[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -111,18 +116,90 @@ model Campaign {
 
 
 model Redemption {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  type      String
-  amount    Decimal  @db.Decimal(10, 2)
-  status    String   @default("pending")
-  details   Json?
-  createdAt DateTime @default(now())
+  id              String    @id @default(cuid())
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String
+  type            String
+  amount          Decimal   @db.Decimal(10, 2)
+  status          String    @default("pending")
+  details         Json?
+  fulfilledAt     DateTime?
+  fulfillmentNote String?
+  createdAt       DateTime  @default(now())
 }
 
 enum Role {
   USER
   ADVERTISER
   ADMIN
+}
+
+// Per-user, per-advertiser balance funded by 20% of campaign-task earnings
+model CampaignWallet {
+  id           String   @id @default(cuid())
+  user         User     @relation("CampaignWalletUser", fields: [userId], references: [id])
+  userId       String
+  advertiser   User     @relation("CampaignWalletAdvertiser", fields: [advertiserId], references: [id])
+  advertiserId String
+  balance      Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, advertiserId])
+}
+
+// A redemption code drawn from a CampaignWallet balance, confirmed in-store by the advertiser
+model CampaignCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String
+  advertiserId String
+  amount       Decimal   @db.Decimal(10, 2)
+  status       String    @default("pending") // pending -> redeemed
+  redeemedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// User-defined savings goal, manually funded from the main wallet
+model Goal {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  name      String
+  target    Decimal  @db.Decimal(10, 2)
+  saved     Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A redemption code drawn from a Goal's saved balance (informational, no merchant confirmation)
+model GoalCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  goalId    String
+  goalName  String
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+}
+
+// Single-row platform configuration, edited via the admin App Settings page
+model AppSettings {
+  id                 String   @id @default("singleton")
+  prices             Json     @default("{\"survey\":15,\"video\":5,\"quiz\":8,\"download\":20,\"signup\":25}")
+  splitAdmin         Int      @default(20)
+  splitData          Int      @default(20)
+  maintenanceEnabled Boolean  @default(false)
+  maintenanceMessage String  @default("")
+  updatedAt          DateTime @updatedAt
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  audience  String   // users | advertisers | all
+  sentBy    String
+  createdAt DateTime @default(now())
 }

@@ -32,9 +32,15 @@ router.patch("/redemptions/:id/approve", requireAuth, requireRole("ADMIN"), asyn
     return res.status(400).json({ error: "Only pending redemptions can be approved." });
   }
 
+  const note = typeof req.body?.fulfillmentNote === "string" ? req.body.fulfillmentNote : null;
+
   const updated = await prisma.redemption.update({
     where: { id: redemption.id },
-    data: { status: "fulfilled" },
+    data: {
+      status: "fulfilled",
+      fulfilledAt: new Date(),
+      fulfillmentNote: note,
+    },
   });
 
   res.json({ message: "Redemption approved.", redemption: updated });
@@ -95,6 +101,9 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
     pendingRedemptions,
     walletTotals,
     campaignTotals,
+    campaignWalletTotals,
+    goalTotals,
+    pendingCampaignCodes,
   ] = await Promise.all([
     prisma.user.count({ where: { role: "USER" } }),
     prisma.user.count({ where: { role: "ADVERTISER" } }),
@@ -107,6 +116,13 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
     prisma.campaign.aggregate({
       _sum: { totalCharged: true, spent: true },
     }),
+    prisma.campaignWallet.aggregate({
+      _sum: { balance: true },
+    }),
+    prisma.goal.aggregate({
+      _sum: { saved: true, target: true },
+    }),
+    prisma.campaignCode.count({ where: { status: "pending" } }),
   ]);
 
   res.json({
@@ -122,6 +138,14 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
     },
     redemptions: {
       pendingRedemptions,
+      pendingCampaignCodes,
+    },
+    campaignWallets: {
+      totalHeld: campaignWalletTotals._sum.balance ?? 0,
+    },
+    goals: {
+      totalSaved: goalTotals._sum.saved ?? 0,
+      totalTargeted: goalTotals._sum.target ?? 0,
     },
     wallets: {
       totalCashHeld: walletTotals._sum.balance ?? 0,

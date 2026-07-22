@@ -56,10 +56,17 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     }
   }
 
+  const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  const splitAdminPct = settings ? settings.splitAdmin / 100 : 0.20;
+  const splitDataPct = settings ? settings.splitData / 100 : 0.20;
+
   const reward = Number(task.reward);
-  const adminFee = reward * 0.15;
-  const dataShare = reward * 0.30;
-  const walletShare = reward - adminFee - dataShare;
+  const adminFee = reward * splitAdminPct;
+  const dataShare = reward * splitDataPct;
+  // Campaign tasks reserve a further 20% for the Campaign Objective Wallet (not admin-configurable);
+  // generic tasks have no company to attribute that share to, so it all goes to the main wallet.
+  const campaignShare = campaign ? reward * 0.20 : 0;
+  const walletShare = reward - adminFee - dataShare - campaignShare;
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.taskCompletion.create({
@@ -91,6 +98,12 @@ await tx.activityLog.create({
     });
 
     if (campaign) {
+      await tx.campaignWallet.upsert({
+        where: { userId_advertiserId: { userId: req.userId!, advertiserId: campaign.advertiserId } },
+        create: { userId: req.userId!, advertiserId: campaign.advertiserId, balance: campaignShare },
+        update: { balance: { increment: campaignShare } },
+      });
+
       const newSpent = Number(campaign.spent) + reward;
       const isExhausted = newSpent >= Number(campaign.budget);
 
@@ -117,6 +130,7 @@ await tx.activityLog.create({
     walletShare,
     dataShare,
     adminFee,
+    campaignShare,
     wallet: result,
   });
 });
