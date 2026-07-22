@@ -3,13 +3,20 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
-
 router.get("/tasks", requireAuth, async (req: AuthRequest, res) => {
   const tasks = await prisma.task.findMany({
     where: { active: true },
+    include: {
+      campaign: {
+        select: {
+          id: true,
+          title: true,
+          advertiser: { select: { firstName: true, lastName: true } },
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
-
   const completed = await prisma.taskCompletion.findMany({
     where: { userId: req.userId },
     select: { taskId: true },
