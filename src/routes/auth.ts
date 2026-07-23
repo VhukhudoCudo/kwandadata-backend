@@ -5,20 +5,21 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 
 const router = Router();
-
 const registerSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
   phone: z.string().min(1),
-  network: z.string().min(1),
-  dob: z.string(),
-  gender: z.string().min(1),
-  language: z.string().min(1),
-  province: z.string().min(1),
-  region: z.string().min(1),
-  employment: z.string().min(1),
+  network: z.string().min(1).optional(),
+  dob: z.string().optional(),
+  gender: z.string().min(1).optional(),
+  language: z.string().min(1).optional(),
+  province: z.string().min(1).optional(),
+  region: z.string().min(1).optional(),
+  employment: z.string().min(1).optional(),
+  company: z.string().min(1).optional(),
+  industry: z.string().min(1).optional(),
   usedReferralOf: z.string().optional(),
   role: z.enum(["USER", "ADVERTISER"]).optional(),
 });
@@ -35,6 +36,17 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
   const data = parsed.data;
+  const isAdvertiser = data.role === "ADVERTISER";
+
+  if (isAdvertiser) {
+    if (!data.company || !data.industry) {
+      return res.status(400).json({ error: "company and industry are required for advertiser accounts." });
+    }
+  } else {
+    if (!data.network || !data.dob || !data.gender || !data.language || !data.province || !data.region || !data.employment) {
+      return res.status(400).json({ error: "network, dob, gender, language, province, region, and employment are required." });
+    }
+  }
 
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) {
@@ -51,12 +63,14 @@ router.post("/register", async (req, res) => {
       passwordHash,
       phone: data.phone,
       network: data.network,
-      dob: new Date(data.dob),
+      dob: data.dob ? new Date(data.dob) : undefined,
       gender: data.gender,
       language: data.language,
       province: data.province,
       region: data.region,
       employment: data.employment,
+      company: data.company,
+      industry: data.industry,
       referralCode: generateReferralCode(data.firstName, data.lastName),
       usedReferralOf: data.usedReferralOf,
       role: data.role ?? "USER",

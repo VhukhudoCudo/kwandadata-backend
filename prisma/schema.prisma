@@ -8,24 +8,25 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   firstName       String
   lastName        String
-  email           String   @unique
+  email           String    @unique
   passwordHash    String
   phone           String
-  network         String
-  dob             DateTime
-  gender          String
-  language        String
-  province        String
-  region          String
-  employment      String
-  referralCode    String   @unique
+  network         String?
+  dob             DateTime?
+  gender          String?
+  language        String?
+  province        String?
+  region          String?
+  employment      String?
+  company         String?
+  industry        String?
+  referralCode    String    @unique
   usedReferralOf  String?
-  role            Role     @default(USER)
-  suspended       Boolean  @default(false)
-
+  role            Role      @default(USER)
+  suspended       Boolean   @default(false)
   wallet          Wallet?
   activities      ActivityLog[]
   completions     TaskCompletion[]
