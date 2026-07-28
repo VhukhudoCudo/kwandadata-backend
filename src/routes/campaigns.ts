@@ -48,6 +48,85 @@ router.get("/", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest,
   res.json({ campaigns });
 });
 
+// Real performance analytics across the advertiser's own campaigns
+router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaigns = await prisma.campaign.findMany({
+    where: { advertiserId: req.userId },
+    include: {
+      tasks: {
+        include: {
+          completions: { select: { id: true, createdAt: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  let totalCompletions = 0;
+  let totalSpent = 0;
+  let totalBudget = 0;
+  const completionsByDay: Record<string, number> = {};
+
+  const perCampaign = campaigns.map((c) => {
+    const campCompletions = c.tasks.reduce((sum, t) => sum + t.completions.length, 0);
+    totalCompletions += campCompletions;
+    totalSpent += Number(c.spent);
+    totalBudget += Number(c.budget);
+
+    for (const t of c.tasks) {
+      for (const comp of t.completions) {
+        const day = comp.createdAt.toISOString().slice(0, 10);
+        completionsByDay[day] = (completionsByDay[day] || 0) + 1;
+      }
+    }
+
+    return {
+      id: c.id,
+      title: c.title,
+      status: c.status,
+      budget: Number(c.budget),
+      spent: Number(c.spent),
+      completions: campCompletions,
+    };
+  });
+
+  res.json({
+    totals: {
+      totalCampaigns: campaigns.length,
+      activeCampaigns: campaigns.filter((c) => c.status === "active").length,
+      totalCompletions,
+      totalSpent,
+      totalBudget,
+    },
+    completionsByDay,
+    campaigns: perCampaign,
+  });
+});
+
+// Downloadable list of users who completed any of the advertiser's campaign tasks
+router.get("/participants", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const completions = await prisma.taskCompletion.findMany({
+    where: { task: { campaign: { advertiserId: req.userId } } },
+    include: {
+      user: { select: { firstName: true, lastName: true, province: true } },
+      task: { select: { title: true, type: true, campaign: { select: { title: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  res.json({
+    participants: completions.map((c) => ({
+      name: `${c.user.firstName} ${c.user.lastName}`,
+      province: c.user.province,
+      campaignTitle: c.task.campaign?.title,
+      taskTitle: c.task.title,
+      taskType: c.task.type,
+      payout: c.payout,
+      completedAt: c.createdAt,
+    })),
+  });
+});
+
 // Get a single campaign (must belong to the requesting advertiser)
 router.get("/:id", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
   const campaign = await prisma.campaign.findUnique({

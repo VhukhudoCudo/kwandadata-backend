@@ -104,6 +104,8 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
     campaignWalletTotals,
     goalTotals,
     pendingCampaignCodes,
+    totalTaskCompletions,
+    recentUsers,
   ] = await Promise.all([
     prisma.user.count({ where: { role: "USER" } }),
     prisma.user.count({ where: { role: "ADVERTISER" } }),
@@ -114,7 +116,7 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
       _sum: { balance: true, dataBalance: true },
     }),
     prisma.campaign.aggregate({
-      _sum: { totalCharged: true, spent: true },
+      _sum: { totalCharged: true, spent: true, budget: true },
     }),
     prisma.campaignWallet.aggregate({
       _sum: { balance: true },
@@ -123,7 +125,19 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
       _sum: { saved: true, target: true },
     }),
     prisma.campaignCode.count({ where: { status: "pending" } }),
+    prisma.taskCompletion.count(),
+    prisma.user.findMany({
+      where: { role: "USER", createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      select: { createdAt: true },
+    }),
   ]);
+
+  // Bucket the last 30 days of registrations by day, for the chart
+  const registrationsByDay: Record<string, number> = {};
+  for (const u of recentUsers) {
+    const day = u.createdAt.toISOString().slice(0, 10);
+    registrationsByDay[day] = (registrationsByDay[day] || 0) + 1;
+  }
 
   res.json({
     users: {
@@ -135,6 +149,7 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
       activeCampaigns,
       totalRevenue: campaignTotals._sum.totalCharged ?? 0,
       totalSpentOnUsers: campaignTotals._sum.spent ?? 0,
+      totalBudget: campaignTotals._sum.budget ?? 0,
     },
     redemptions: {
       pendingRedemptions,
@@ -147,6 +162,10 @@ router.get("/analytics", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
       totalSaved: goalTotals._sum.saved ?? 0,
       totalTargeted: goalTotals._sum.target ?? 0,
     },
+    taskCompletions: {
+      total: totalTaskCompletions,
+    },
+    registrationsByDay,
     wallets: {
       totalCashHeld: walletTotals._sum.balance ?? 0,
       totalDataHeld: walletTotals._sum.dataBalance ?? 0,

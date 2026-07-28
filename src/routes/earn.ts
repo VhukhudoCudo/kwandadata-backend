@@ -46,6 +46,12 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     return res.status(409).json({ error: "You've already completed this task." });
   }
 
+  const completionCount = await prisma.taskCompletion.count({ where: { taskId } });
+  if (completionCount >= 2) {
+    await prisma.task.update({ where: { id: taskId }, data: { active: false } });
+    return res.status(400).json({ error: "This activity has already reached its maximum number of participants." });
+  }
+
   const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
   if (!wallet) {
     return res.status(404).json({ error: "Wallet not found." });
@@ -79,6 +85,10 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     await tx.taskCompletion.create({
       data: { userId: req.userId!, taskId, payout: reward },
     });
+
+    if (completionCount + 1 >= 2) {
+      await tx.task.update({ where: { id: taskId }, data: { active: false } });
+    }
 
     const updatedWallet = await tx.wallet.update({
       where: { id: wallet.id },
