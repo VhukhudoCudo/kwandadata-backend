@@ -84,12 +84,9 @@ const { title, description, type, reward, content } = req.body;
     return res.status(400).json({ error: "reward must be a positive number." });
   }
 
-  if ((type === "download" || type === "signup")) {
-    if (!content || typeof content.link !== "string" || !content.link.trim()) {
-      return res.status(400).json({ error: "A link is required for download and signup activities." });
-    }
+ if (!content || typeof content.link !== "string" || !content.link.trim()) {
+    return res.status(400).json({ error: "A link is required for this activity." });
   }
-
   const task = await prisma.task.create({
     data: {
       title,
