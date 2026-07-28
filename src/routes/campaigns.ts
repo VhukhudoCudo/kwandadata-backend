@@ -100,6 +100,7 @@ const { title, description, type, reward, content } = req.body;
       campaignId: campaign.id,
       active: false, // stays inactive until the campaign launches
     },
+  });
 
   res.status(201).json({ task });
 });
