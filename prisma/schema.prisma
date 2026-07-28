@@ -79,6 +79,7 @@ model Task {
   type        String
   reward      Decimal  @db.Decimal(10, 2)
   active      Boolean  @default(true)
+  content     Json?
   completions TaskCompletion[]
   campaign    Campaign? @relation(fields: [campaignId], references: [id])
   campaignId  String?
@@ -92,11 +93,11 @@ model TaskCompletion {
   task      Task     @relation(fields: [taskId], references: [id])
   taskId    String
   payout    Decimal  @db.Decimal(10, 2)
+  responses Json?
   createdAt DateTime @default(now())
 
   @@unique([userId, taskId])
 }
-
 model Campaign {
   id           String   @id @default(cuid())
   advertiser   User     @relation(fields: [advertiserId], references: [id])

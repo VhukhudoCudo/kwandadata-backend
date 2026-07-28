@@ -73,8 +73,7 @@ router.post("/:id/tasks", requireAuth, requireRole("ADVERTISER"), async (req: Au
   if (campaign.status !== "draft") {
     return res.status(400).json({ error: "Tasks can only be added while the campaign is in draft." });
   }
-
-  const { title, description, type, reward } = req.body;
+const { title, description, type, reward, content } = req.body;
 
   if (!title || !description || !type || reward == null) {
     return res.status(400).json({ error: "title, description, type, and reward are required." });
@@ -85,16 +84,22 @@ router.post("/:id/tasks", requireAuth, requireRole("ADVERTISER"), async (req: Au
     return res.status(400).json({ error: "reward must be a positive number." });
   }
 
+  if ((type === "download" || type === "signup")) {
+    if (!content || typeof content.link !== "string" || !content.link.trim()) {
+      return res.status(400).json({ error: "A link is required for download and signup activities." });
+    }
+  }
+
   const task = await prisma.task.create({
     data: {
       title,
       description,
       type,
       reward: rewardNum,
+      content: content ?? undefined,
       campaignId: campaign.id,
       active: false, // stays inactive until the campaign launches
     },
-  });
 
   res.status(201).json({ task });
 });
