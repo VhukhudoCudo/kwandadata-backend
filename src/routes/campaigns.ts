@@ -102,7 +102,7 @@ const { title, description, type, reward, content } = req.body;
   res.status(201).json({ task });
 });
 
-// Launch a campaign: draft -> active (activates all its tasks)
+// Submit a campaign for admin review: draft -> pending (does not go live yet)
 router.patch("/:id/launch", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
   const campaign = await prisma.campaign.findUnique({
     where: { id: req.params.id },
@@ -114,11 +114,60 @@ router.patch("/:id/launch", requireAuth, requireRole("ADVERTISER"), async (req: 
   }
 
   if (campaign.status !== "draft") {
-    return res.status(400).json({ error: "Only draft campaigns can be launched." });
+    return res.status(400).json({ error: "Only draft campaigns can be submitted." });
   }
 
   if (campaign.tasks.length === 0) {
-    return res.status(400).json({ error: "Add at least one task before launching." });
+    return res.status(400).json({ error: "Add at least one task before submitting." });
+  }
+
+  const updated = await prisma.campaign.update({
+    where: { id: campaign.id },
+    data: { status: "pending" },
+    include: { tasks: true },
+  });
+
+  res.json({ campaign: updated });
+});
+
+// Advertiser pauses their own active campaign
+router.patch("/:id/pause", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id } });
+
+  if (!campaign || campaign.advertiserId !== req.userId) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+
+  if (campaign.status !== "active") {
+    return res.status(400).json({ error: "Only active campaigns can be paused." });
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.task.updateMany({
+      where: { campaignId: campaign.id },
+      data: { active: false },
+    });
+
+    return tx.campaign.update({
+      where: { id: campaign.id },
+      data: { status: "paused" },
+      include: { tasks: true },
+    });
+  });
+
+  res.json({ campaign: updated });
+});
+
+// Advertiser resumes their own paused campaign
+router.patch("/:id/resume", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id } });
+
+  if (!campaign || campaign.advertiserId !== req.userId) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+
+  if (campaign.status !== "paused") {
+    return res.status(400).json({ error: "Only paused campaigns can be resumed." });
   }
 
   const updated = await prisma.$transaction(async (tx) => {

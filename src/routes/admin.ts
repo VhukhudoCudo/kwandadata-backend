@@ -266,4 +266,51 @@ router.patch("/campaigns/:id/pause", requireAuth, requireRole("ADMIN"), async (r
   res.json({ message: "Campaign paused by admin.", campaign: updated });
 });
 
+// Admin approves a pending campaign: pending -> active (activates all its tasks)
+router.patch("/campaigns/:id/approve", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id }, include: { tasks: true } });
+  if (!campaign) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+  if (campaign.status !== "pending") {
+    return res.status(400).json({ error: "Only pending campaigns can be approved." });
+  }
+  if (campaign.tasks.length === 0) {
+    return res.status(400).json({ error: "This campaign has no tasks to activate." });
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.task.updateMany({
+      where: { campaignId: campaign.id },
+      data: { active: true },
+    });
+
+    return tx.campaign.update({
+      where: { id: campaign.id },
+      data: { status: "active" },
+      include: { tasks: true },
+    });
+  });
+
+  res.json({ message: "Campaign approved and is now live.", campaign: updated });
+});
+
+// Admin rejects a pending campaign: pending -> rejected
+router.patch("/campaigns/:id/reject", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id } });
+  if (!campaign) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+  if (campaign.status !== "pending") {
+    return res.status(400).json({ error: "Only pending campaigns can be rejected." });
+  }
+
+  const updated = await prisma.campaign.update({
+    where: { id: campaign.id },
+    data: { status: "rejected" },
+  });
+
+  res.json({ message: "Campaign rejected.", campaign: updated });
+});
+
 export default router;
