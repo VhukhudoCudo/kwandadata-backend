@@ -172,7 +172,7 @@ router.get("/users", requireAuth, requireRole("ADMIN"), async (req: AuthRequest,
           }
         : {}),
     },
-    select: {
+select: {
       id: true,
       firstName: true,
       lastName: true,
@@ -180,6 +180,8 @@ router.get("/users", requireAuth, requireRole("ADMIN"), async (req: AuthRequest,
       phone: true,
       role: true,
       suspended: true,
+      company: true,
+      industry: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
