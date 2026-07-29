@@ -1,10 +1,18 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const RESEND_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_KEY ? new Resend(RESEND_KEY) : null;
+if (!resend) {
+  console.warn("RESEND_API_KEY is not set — emails will be skipped instead of sent.");
+}
 const FROM_EMAIL = process.env.EMAIL_FROM || "KwandaData <onboarding@resend.dev>";
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://kwandadata.netlify.app";
 
 export async function sendPasswordResetEmail(to: string, firstName: string, token: string) {
+  if (!resend) {
+    console.warn("Skipping password reset email (RESEND_API_KEY not set):", to);
+    return;
+  }
   const link = `${FRONTEND_URL}/#reset-password?token=${token}`;
   try {
     const result = await resend.emails.send({
@@ -30,6 +38,10 @@ export async function sendPasswordResetEmail(to: string, firstName: string, toke
 }
 
 export async function sendRedemptionCodeEmail(to: string, firstName: string, code: string, description: string, amount: number) {
+  if (!resend) {
+    console.warn("Skipping redemption code email (RESEND_API_KEY not set):", to);
+    return;
+  }
   try {
     const result = await resend.emails.send({
       from: FROM_EMAIL,
