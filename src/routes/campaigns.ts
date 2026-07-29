@@ -137,16 +137,25 @@ router.get("/participants", requireAuth, requireRole("ADVERTISER"), async (req: 
   const completions = await prisma.taskCompletion.findMany({
     where: { task: { campaign: { advertiserId: req.userId } } },
     include: {
-      user: { select: { firstName: true, lastName: true, province: true } },
+      user: { select: { firstName: true, lastName: true, dob: true, province: true, region: true, employment: true } },
       task: { select: { title: true, type: true, campaign: { select: { title: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });
 
+  function calcAge(dob: Date | null): number | null {
+    if (!dob) return null;
+    const diff = Date.now() - dob.getTime();
+    return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+  }
+
   res.json({
     participants: completions.map((c) => ({
       name: `${c.user.firstName} ${c.user.lastName}`,
+      age: calcAge(c.user.dob),
       province: c.user.province,
+      region: c.user.region,
+      employment: c.user.employment,
       campaignTitle: c.task.campaign?.title,
       taskTitle: c.task.title,
       taskType: c.task.type,
