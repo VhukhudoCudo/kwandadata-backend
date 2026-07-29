@@ -4,8 +4,19 @@ import { requireAuth, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 router.get("/tasks", requireAuth, async (req: AuthRequest, res) => {
+  const completed = await prisma.taskCompletion.findMany({
+    where: { userId: req.userId },
+    select: { taskId: true },
+  });
+  const completedIds = completed.map((c) => c.taskId);
+
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: {
+      OR: [
+        { active: true },
+        { id: { in: completedIds } },
+      ],
+    },
     include: {
       campaign: {
         select: {
@@ -17,20 +28,15 @@ router.get("/tasks", requireAuth, async (req: AuthRequest, res) => {
     },
     orderBy: { createdAt: "desc" },
   });
-  const completed = await prisma.taskCompletion.findMany({
-    where: { userId: req.userId },
-    select: { taskId: true },
-  });
-  const completedIds = new Set(completed.map((c) => c.taskId));
+  const completedIdSet = new Set(completedIds);
 
   res.json({
     tasks: tasks.map((t) => ({
       ...t,
-      completed: completedIds.has(t.id),
+      completed: completedIdSet.has(t.id),
     })),
   });
 });
-
 router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) => {
   const taskId = req.params.id;
 
