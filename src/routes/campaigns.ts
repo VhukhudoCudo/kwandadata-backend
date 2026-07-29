@@ -41,13 +41,16 @@ const adminFee = budgetNum * 0.20;
 router.get("/", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
   const campaigns = await prisma.campaign.findMany({
     where: { advertiserId: req.userId },
-    include: { tasks: true },
+    include: {
+      tasks: {
+        include: { _count: { select: { completions: true } } },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
   res.json({ campaigns });
 });
-
 // Real performance analytics across the advertiser's own campaigns
 router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
   const campaigns = await prisma.campaign.findMany({
@@ -55,7 +58,7 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
     include: {
       tasks: {
         include: {
-          completions: { select: { id: true, createdAt: true } },
+          completions: { select: { id: true, userId: true, createdAt: true } },
         },
       },
     },
@@ -66,6 +69,14 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
   let totalSpent = 0;
   let totalBudget = 0;
   const completionsByDay: Record<string, number> = {};
+  const completionsByUser: Record<string, number> = {};
+  const usersToday = new Set<string>();
+  const usersThisMonth = new Set<string>();
+  const usersAllTime = new Set<string>();
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   const perCampaign = campaigns.map((c) => {
     const campCompletions = c.tasks.reduce((sum, t) => sum + t.completions.length, 0);
@@ -77,6 +88,11 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
       for (const comp of t.completions) {
         const day = comp.createdAt.toISOString().slice(0, 10);
         completionsByDay[day] = (completionsByDay[day] || 0) + 1;
+        completionsByUser[comp.userId] = (completionsByUser[comp.userId] || 0) + 1;
+
+        usersAllTime.add(comp.userId);
+        if (comp.createdAt >= monthAgo) usersThisMonth.add(comp.userId);
+        if (day === todayStr) usersToday.add(comp.userId);
       }
     }
 
@@ -90,6 +106,9 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
     };
   });
 
+  const uniqueParticipants = usersAllTime.size;
+  const repeatParticipants = Object.values(completionsByUser).filter((n) => n >= 2).length;
+
   res.json({
     totals: {
       totalCampaigns: campaigns.length,
@@ -97,6 +116,16 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
       totalCompletions,
       totalSpent,
       totalBudget,
+    },
+    audienceReach: {
+      dailyActive: usersToday.size,
+      monthlyActive: usersThisMonth.size,
+      totalParticipants: uniqueParticipants,
+    },
+    engagement: {
+      avgCompletionsPerUser: uniqueParticipants > 0 ? Math.round((totalCompletions / uniqueParticipants) * 10) / 10 : 0,
+      repeatParticipants,
+      repeatRate: uniqueParticipants > 0 ? Math.round((repeatParticipants / uniqueParticipants) * 100) : 0,
     },
     completionsByDay,
     campaigns: perCampaign,

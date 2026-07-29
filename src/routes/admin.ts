@@ -201,7 +201,9 @@ select: {
       suspended: true,
       company: true,
       industry: true,
+      province: true,
       createdAt: true,
+      wallet: { select: { balance: true, dataBalance: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -240,6 +242,50 @@ router.patch("/users/:id/reinstate", requireAuth, requireRole("ADMIN"), async (r
 
   res.json({ message: "User reinstated.", user: updated });
 });
+
+// Real per-advertiser financial breakdown for admin Financial Control
+router.get("/advertisers/financial", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const advertisers = await prisma.user.findMany({
+    where: { role: "ADVERTISER" },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      company: true,
+      campaigns: {
+        select: { budget: true, adminFee: true, vat: true, totalCharged: true, spent: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const statements = advertisers.map((a) => {
+    const totals = a.campaigns.reduce(
+      (acc, c) => {
+        acc.totalCharged += Number(c.totalCharged);
+        acc.totalAdminFee += Number(c.adminFee);
+        acc.totalVat += Number(c.vat);
+        acc.totalSpent += Number(c.spent);
+        return acc;
+      },
+      { totalCharged: 0, totalAdminFee: 0, totalVat: 0, totalSpent: 0 }
+    );
+
+    return {
+      id: a.id,
+      name: `${a.firstName} ${a.lastName}`,
+      email: a.email,
+      company: a.company,
+      campaignCount: a.campaigns.length,
+      ...totals,
+    };
+  });
+
+  res.json({ statements });
+});
+
+// List all campaigns platform-wide (admin oversight)
 
 // List all campaigns platform-wide (admin oversight)
 router.get("/campaigns", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
