@@ -7,7 +7,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "https://kwandadata.netlify.app
 export async function sendPasswordResetEmail(to: string, firstName: string, token: string) {
   const link = `${FRONTEND_URL}/#reset-password?token=${token}`;
   try {
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: FROM_EMAIL,
       to,
       subject: "Reset your KwandaData password",
@@ -19,6 +19,11 @@ export async function sendPasswordResetEmail(to: string, firstName: string, toke
         <p>— The KwandaData Team</p>
       `,
     });
+    if (result.error) {
+      console.error("Resend rejected the password reset email:", result.error);
+    } else {
+      console.log("Password reset email sent, id:", result.data?.id);
+    }
   } catch (err) {
     console.error("Failed to send password reset email:", err);
   }
@@ -26,7 +31,7 @@ export async function sendPasswordResetEmail(to: string, firstName: string, toke
 
 export async function sendRedemptionCodeEmail(to: string, firstName: string, code: string, description: string, amount: number) {
   try {
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: FROM_EMAIL,
       to,
       subject: `Your KwandaData redemption code: ${code}`,
@@ -39,6 +44,11 @@ export async function sendRedemptionCodeEmail(to: string, firstName: string, cod
         <p>— The KwandaData Team</p>
       `,
     });
+    if (result.error) {
+      console.error("Resend rejected the redemption code email:", result.error);
+    } else {
+      console.log("Redemption code email sent, id:", result.data?.id);
+    }
   } catch (err) {
     console.error("Failed to send redemption code email:", err);
   }
