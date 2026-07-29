@@ -63,8 +63,28 @@ router.patch("/splits", requireAuth, requireRole("ADMIN"), async (req: AuthReque
     where: { id: "singleton" },
     data: { splitAdmin, splitData },
   });
+res.json({ message: "Earnings split saved. Applies immediately.", settings });
+});
 
-  res.json({ message: "Earnings split saved. Applies immediately.", settings });
+const referralBonusSchema = z.object({
+  referralBonus: z.number().min(0),
+});
+
+// Admin: update how much a referrer earns when someone registers using their code
+router.patch("/referral-bonus", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const parsed = referralBonusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  await getOrCreateSettings();
+  const settings = await prisma.appSettings.update({
+    where: { id: "singleton" },
+    data: { referralBonus: parsed.data.referralBonus },
+  });
+
+  res.json({ message: "Referral bonus saved.", settings });
+});
 });
 
 const maintenanceSchema = z.object({

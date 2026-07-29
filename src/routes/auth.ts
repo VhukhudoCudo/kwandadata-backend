@@ -79,7 +79,33 @@ router.post("/register", async (req, res) => {
       role: data.role ?? "USER",
       wallet: { create: {} },
     },
-  });
+});
+
+  if (data.usedReferralOf) {
+    const referrer = await prisma.user.findUnique({ where: { referralCode: data.usedReferralOf } });
+    if (referrer) {
+      const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+      const bonus = settings ? Number(settings.referralBonus) : 5;
+
+      const referrerWallet = await prisma.wallet.findUnique({ where: { userId: referrer.id } });
+      if (referrerWallet) {
+        await prisma.$transaction([
+          prisma.wallet.update({
+            where: { id: referrerWallet.id },
+            data: { balance: { increment: bonus } },
+          }),
+          prisma.transaction.create({
+            data: {
+              walletId: referrerWallet.id,
+              type: "earned",
+              title: `Referral bonus: ${data.firstName} ${data.lastName} joined using your code`,
+              amount: bonus,
+            },
+          }),
+        ]);
+      }
+    }
+  }
 
   const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, {
     expiresIn: "7d",

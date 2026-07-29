@@ -197,6 +197,7 @@ model AppSettings {
   prices             Json     @default("{\"survey\":15,\"video\":5,\"quiz\":8,\"download\":20,\"signup\":25}")
   splitAdmin         Int      @default(20)
   splitData          Int      @default(20)
+  referralBonus      Decimal  @default(5) @db.Decimal(10, 2)
   maintenanceEnabled Boolean  @default(false)
   maintenanceMessage String  @default("")
   updatedAt          DateTime @updatedAt
