@@ -63,7 +63,8 @@ router.patch("/splits", requireAuth, requireRole("ADMIN"), async (req: AuthReque
     where: { id: "singleton" },
     data: { splitAdmin, splitData },
   });
-res.json({ message: "Earnings split saved. Applies immediately.", settings });
+
+  res.json({ message: "Earnings split saved. Applies immediately.", settings });
 });
 
 const referralBonusSchema = z.object({
@@ -84,7 +85,6 @@ router.patch("/referral-bonus", requireAuth, requireRole("ADMIN"), async (req: A
   });
 
   res.json({ message: "Referral bonus saved.", settings });
-});
 });
 
 const maintenanceSchema = z.object({
