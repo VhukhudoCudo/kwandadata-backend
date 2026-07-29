@@ -4,26 +4,6 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.EMAIL_FROM || "KwandaData <onboarding@resend.dev>";
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://kwandadata.netlify.app";
 
-export async function sendVerificationEmail(to: string, firstName: string, token: string) {
-  const link = `${FRONTEND_URL}/#verify-email?token=${token}`;
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      subject: "Verify your KwandaData account",
-      html: `
-        <p>Hi ${firstName},</p>
-        <p>Welcome to KwandaData! Please verify your email address by clicking the link below:</p>
-        <p><a href="${link}">Verify my email</a></p>
-        <p>This link expires in 24 hours.</p>
-        <p>— The KwandaData Team</p>
-      `,
-    });
-  } catch (err) {
-    console.error("Failed to send verification email:", err);
-  }
-}
-
 export async function sendPasswordResetEmail(to: string, firstName: string, token: string) {
   const link = `${FRONTEND_URL}/#reset-password?token=${token}`;
   try {
@@ -41,5 +21,25 @@ export async function sendPasswordResetEmail(to: string, firstName: string, toke
     });
   } catch (err) {
     console.error("Failed to send password reset email:", err);
+  }
+}
+
+export async function sendRedemptionCodeEmail(to: string, firstName: string, code: string, description: string, amount: number) {
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Your KwandaData redemption code: ${code}`,
+      html: `
+        <p>Hi ${firstName},</p>
+        <p>Here's your redemption code, as a backup in case you need it later:</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:2px;">${code}</p>
+        <p>${description} — R ${amount.toFixed(2)}</p>
+        <p>Keep this email for your records.</p>
+        <p>— The KwandaData Team</p>
+      `,
+    });
+  } catch (err) {
+    console.error("Failed to send redemption code email:", err);
   }
 }

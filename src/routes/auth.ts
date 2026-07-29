@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { sendVerificationEmail } from "../lib/email.js";
+import { sendPasswordResetEmail } from "../lib/email.js";
 import { requireAuth, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -57,8 +57,6 @@ router.post("/register", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(data.password, 12);
-  const verificationToken = crypto.randomBytes(32).toString("hex");
-  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const user = await prisma.user.create({
     data: {
@@ -79,19 +77,15 @@ router.post("/register", async (req, res) => {
       referralCode: generateReferralCode(data.firstName, data.lastName),
       usedReferralOf: data.usedReferralOf,
       role: data.role ?? "USER",
-      verificationToken,
-      verificationExpires,
       wallet: { create: {} },
     },
   });
-
-  await sendVerificationEmail(user.email, user.firstName, verificationToken);
 
   const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, {
     expiresIn: "7d",
   });
 
-  const { passwordHash: _, verificationToken: __, ...safeUser } = user;
+  const { passwordHash: _, ...safeUser } = user;
   res.status(201).json({ user: safeUser, token });
 });
 
@@ -129,47 +123,61 @@ router.post("/login", async (req, res) => {
   res.json({ user: safeUser, token });
 });
 
-// Verify a user's email using the token from their verification link
-router.get("/verify-email", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : undefined;
-  if (!token) {
-    return res.status(400).json({ error: "Verification token is required." });
-  }
-
-  const user = await prisma.user.findUnique({ where: { verificationToken: token } });
-  if (!user || !user.verificationExpires || user.verificationExpires < new Date()) {
-    return res.status(400).json({ error: "This verification link is invalid or has expired." });
-  }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { emailVerified: true, verificationToken: null, verificationExpires: null },
-  });
-
-  res.json({ message: "Email verified successfully." });
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
 });
 
-// Resend the verification email (for a logged-in but unverified user)
-router.post("/resend-verification", requireAuth, async (req: AuthRequest, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId } });
-  if (!user) {
-    return res.status(404).json({ error: "User not found." });
+// Request a password reset — always responds the same way whether or not
+// the email exists, so this can't be used to check which emails are registered.
+router.post("/forgot-password", async (req, res) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
   }
-  if (user.emailVerified) {
-    return res.status(400).json({ error: "Your email is already verified." });
+  const { email } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user) {
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken, resetExpires },
+    });
+
+    await sendPasswordResetEmail(user.email, user.firstName, resetToken);
   }
 
-  const verificationToken = crypto.randomBytes(32).toString("hex");
-  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  res.json({ message: "If that email is registered, a reset link has been sent." });
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(6),
+});
+
+// Complete a password reset using the token from the email link
+router.post("/reset-password", async (req, res) => {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { token, newPassword } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { resetToken: token } });
+  if (!user || !user.resetExpires || user.resetExpires < new Date()) {
+    return res.status(400).json({ error: "This reset link is invalid or has expired." });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { verificationToken, verificationExpires },
+    data: { passwordHash, resetToken: null, resetExpires: null },
   });
 
-  await sendVerificationEmail(user.email, user.firstName, verificationToken);
-
-  res.json({ message: "Verification email sent." });
+  res.json({ message: "Password reset successfully." });
 });
 
 export default router;
