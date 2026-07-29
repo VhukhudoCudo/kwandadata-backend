@@ -8,12 +8,17 @@ datasource db {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  firstName       String
-  lastName        String
-  email           String    @unique
-  passwordHash    String
-  phone           String
+  id                    String    @id @default(cuid())
+  firstName             String
+  lastName              String
+  email                 String    @unique
+  passwordHash          String
+  phone                 String
+  emailVerified         Boolean   @default(false)
+  verificationToken     String?   @unique
+  verificationExpires   DateTime?
+  resetToken            String?   @unique
+  resetExpires          DateTime?
   network         String?
   dob             DateTime?
   gender          String?

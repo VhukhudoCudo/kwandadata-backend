@@ -1,8 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
+import { sendVerificationEmail } from "../lib/email.js";
+import { requireAuth, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 const registerSchema = z.object({
@@ -54,6 +57,8 @@ router.post("/register", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(data.password, 12);
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const user = await prisma.user.create({
     data: {
@@ -74,15 +79,19 @@ router.post("/register", async (req, res) => {
       referralCode: generateReferralCode(data.firstName, data.lastName),
       usedReferralOf: data.usedReferralOf,
       role: data.role ?? "USER",
+      verificationToken,
+      verificationExpires,
       wallet: { create: {} },
     },
   });
+
+  await sendVerificationEmail(user.email, user.firstName, verificationToken);
 
   const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, {
     expiresIn: "7d",
   });
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _, verificationToken: __, ...safeUser } = user;
   res.status(201).json({ user: safeUser, token });
 });
 
@@ -118,6 +127,49 @@ router.post("/login", async (req, res) => {
 
   const { passwordHash: _, ...safeUser } = user;
   res.json({ user: safeUser, token });
+});
+
+// Verify a user's email using the token from their verification link
+router.get("/verify-email", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : undefined;
+  if (!token) {
+    return res.status(400).json({ error: "Verification token is required." });
+  }
+
+  const user = await prisma.user.findUnique({ where: { verificationToken: token } });
+  if (!user || !user.verificationExpires || user.verificationExpires < new Date()) {
+    return res.status(400).json({ error: "This verification link is invalid or has expired." });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { emailVerified: true, verificationToken: null, verificationExpires: null },
+  });
+
+  res.json({ message: "Email verified successfully." });
+});
+
+// Resend the verification email (for a logged-in but unverified user)
+router.post("/resend-verification", requireAuth, async (req: AuthRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!user) {
+    return res.status(404).json({ error: "User not found." });
+  }
+  if (user.emailVerified) {
+    return res.status(400).json({ error: "Your email is already verified." });
+  }
+
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { verificationToken, verificationExpires },
+  });
+
+  await sendVerificationEmail(user.email, user.firstName, verificationToken);
+
+  res.json({ message: "Verification email sent." });
 });
 
 export default router;

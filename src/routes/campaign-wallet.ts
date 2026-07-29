@@ -44,6 +44,11 @@ const redeemSchema = z.object({
 
 // Redeem part of a Campaign Wallet balance for a code (min R20)
 router.post("/redeem", requireAuth, async (req: AuthRequest, res) => {
+  const requester = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!requester?.emailVerified) {
+    return res.status(403).json({ error: "Please verify your email before redeeming." });
+  }
+
   const parsed = redeemSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });

@@ -132,6 +132,11 @@ const redeemCodeSchema = z.object({ amount: z.number().positive() });
 
 // Redeem part of a goal's saved balance for an informational code (no merchant confirmation)
 router.post("/:id/redeem", requireAuth, async (req: AuthRequest, res) => {
+  const requester = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!requester?.emailVerified) {
+    return res.status(403).json({ error: "Please verify your email before redeeming." });
+  }
+
   const parsed = redeemCodeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -176,6 +181,11 @@ const redeemBankSchema = z.object({
 // Redeem part of a goal's saved balance as a bank/e-wallet payout request.
 // Reuses the existing Redemption/admin-approval flow (type: "goal_payout").
 router.post("/:id/redeem-bank", requireAuth, async (req: AuthRequest, res) => {
+  const requester = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!requester?.emailVerified) {
+    return res.status(403).json({ error: "Please verify your email before redeeming." });
+  }
+
   const parsed = redeemBankSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });

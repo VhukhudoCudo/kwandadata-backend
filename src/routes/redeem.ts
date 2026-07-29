@@ -12,6 +12,11 @@ const redeemSchema = z.object({
 });
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
+  const requester = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!requester?.emailVerified) {
+    return res.status(403).json({ error: "Please verify your email before redeeming." });
+  }
+
   const parsed = redeemSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
