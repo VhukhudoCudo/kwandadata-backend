@@ -31,7 +31,7 @@ model User {
   activities      ActivityLog[]
   completions     TaskCompletion[]
   redemptions     Redemption[]
-  campagins       Campaign[]
+campaigns       Campaign[]
   campaignWallets         CampaignWallet[] @relation("CampaignWalletUser")
   campaignWalletsSponsored CampaignWallet[] @relation("CampaignWalletAdvertiser")
   campaignCodes   CampaignCode[]
