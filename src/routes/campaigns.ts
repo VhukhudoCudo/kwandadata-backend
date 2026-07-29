@@ -300,7 +300,63 @@ router.patch("/:id/resume", requireAuth, requireRole("ADVERTISER"), async (req: 
     });
   });
 
-  res.json({ campaign: updated });
+res.json({ campaign: updated });
+});
+
+// Advertiser adds more budget to an existing campaign (charged the same 20% admin fee + 15% VAT, on just the added amount)
+router.patch("/:id/add-budget", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest, res) => {
+  const campaign = await prisma.campaign.findUnique({ where: { id: req.params.id }, include: { tasks: true } });
+
+  if (!campaign || campaign.advertiserId !== req.userId) {
+    return res.status(404).json({ error: "Campaign not found." });
+  }
+
+  if (!["active", "paused", "completed"].includes(campaign.status)) {
+    return res.status(400).json({ error: "This campaign can't be topped up right now." });
+  }
+
+  const addAmount = Number(req.body.amount);
+  if (isNaN(addAmount) || addAmount <= 0) {
+    return res.status(400).json({ error: "amount must be a positive number." });
+  }
+
+  const addedAdminFee = addAmount * 0.20;
+  const addedVat = addAmount * 0.15;
+  const addedTotalCharge = addAmount + addedAdminFee + addedVat;
+
+  const wasExhausted = campaign.status === "completed";
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (wasExhausted) {
+      await tx.task.updateMany({
+        where: { campaignId: campaign.id },
+        data: { active: true },
+      });
+    }
+
+    return tx.campaign.update({
+      where: { id: campaign.id },
+      data: {
+        budget: { increment: addAmount },
+        adminFee: { increment: addedAdminFee },
+        vat: { increment: addedVat },
+        totalCharged: { increment: addedTotalCharge },
+        ...(wasExhausted ? { status: "active" } : {}),
+      },
+      include: { tasks: true },
+    });
+  });
+
+  res.json({
+    message: wasExhausted
+      ? "Budget added and campaign reactivated."
+      : "Budget added.",
+    addedAmount: addAmount,
+    addedAdminFee,
+    addedVat,
+    addedTotalCharge,
+    campaign: updated,
+  });
 });
 
 // Billing summary across all of the advertiser's campaigns
