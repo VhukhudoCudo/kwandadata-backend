@@ -240,9 +240,51 @@ router.patch("/users/:id/reinstate", requireAuth, requireRole("ADMIN"), async (r
     select: { id: true, email: true, suspended: true },
   });
 
-  res.json({ message: "User reinstated.", user: updated });
+res.json({ message: "User reinstated.", user: updated });
 });
 
+// Admin directly sets a user's wallet balance to a new absolute value.
+// Creates a real Transaction record so the change is auditable, not a silent edit.
+router.patch("/users/:id/adjust-balance", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const newBalance = Number(req.body.balance);
+  if (isNaN(newBalance) || newBalance < 0) {
+    return res.status(400).json({ error: "balance must be zero or a positive number." });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
+  if (!wallet) {
+    return res.status(404).json({ error: "Wallet not found for this user." });
+  }
+
+  const currentBalance = Number(wallet.balance);
+  const delta = newBalance - currentBalance;
+
+  if (delta === 0) {
+    return res.json({ message: "Balance unchanged.", wallet });
+  }
+
+  const [updatedWallet] = await prisma.$transaction([
+    prisma.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: newBalance },
+    }),
+    prisma.transaction.create({
+      data: {
+        walletId: wallet.id,
+        type: delta > 0 ? "earned" : "refund",
+        title: `Admin adjustment: balance set to R ${newBalance.toFixed(2)}`,
+        amount: Math.abs(delta),
+      },
+    }),
+  ]);
+
+  res.json({ message: "Balance updated.", wallet: updatedWallet });
+});
 // Real per-advertiser financial breakdown for admin Financial Control
 router.get("/advertisers/financial", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
   const advertisers = await prisma.user.findMany({
