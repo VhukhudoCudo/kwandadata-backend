@@ -106,8 +106,22 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
     };
   });
 
-  const uniqueParticipants = usersAllTime.size;
+const uniqueParticipants = usersAllTime.size;
   const repeatParticipants = Object.values(completionsByUser).filter((n) => n >= 2).length;
+
+  const participantUsers = await prisma.user.findMany({
+    where: { id: { in: Array.from(usersAllTime) } },
+    select: { province: true, gender: true },
+  });
+
+  const byProvince: Record<string, number> = {};
+  const byGender: Record<string, number> = {};
+  for (const u of participantUsers) {
+    const prov = u.province || "Not specified";
+    const gen = u.gender || "Not specified";
+    byProvince[prov] = (byProvince[prov] || 0) + 1;
+    byGender[gen] = (byGender[gen] || 0) + 1;
+  }
 
   res.json({
     totals: {
@@ -126,6 +140,10 @@ router.get("/analytics", requireAuth, requireRole("ADVERTISER"), async (req: Aut
       avgCompletionsPerUser: uniqueParticipants > 0 ? Math.round((totalCompletions / uniqueParticipants) * 10) / 10 : 0,
       repeatParticipants,
       repeatRate: uniqueParticipants > 0 ? Math.round((repeatParticipants / uniqueParticipants) * 100) : 0,
+    },
+    demographics: {
+      byProvince,
+      byGender,
     },
     completionsByDay,
     campaigns: perCampaign,
