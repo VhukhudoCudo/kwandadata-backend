@@ -45,17 +45,43 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     return res.status(404).json({ error: "Task not found or no longer active." });
   }
 
-  const existing = await prisma.taskCompletion.findUnique({
-    where: { userId_taskId: { userId: req.userId!, taskId } },
-  });
-  if (existing) {
-    return res.status(409).json({ error: "You've already completed this task." });
-  }
+  const isVideo = task.type === "video";
+  let priorCompletionCount = 0;
 
-  const completionCount = await prisma.taskCompletion.count({ where: { taskId } });
-  if (completionCount >= 2) {
-    await prisma.task.update({ where: { id: taskId }, data: { active: false } });
-    return res.status(400).json({ error: "This activity has already reached its maximum number of participants." });
+  if (isVideo) {
+    const maxTotal = task.maxTotal ?? 5;
+    const maxPerWindow = task.maxPerWindow ?? 1;
+    const windowMs = 24 * 60 * 60 * 1000;
+
+    const myCompletions = await prisma.taskCompletion.findMany({
+      where: { userId: req.userId, taskId },
+      select: { createdAt: true },
+      orderBy: { createdAt: "desc" },
+    });
+    priorCompletionCount = myCompletions.length;
+
+    if (priorCompletionCount >= maxTotal) {
+      return res.status(400).json({ error: `You've reached the maximum of ${maxTotal} watches for this video.` });
+    }
+
+    const windowStart = new Date(Date.now() - windowMs);
+    const inWindow = myCompletions.filter((c) => c.createdAt >= windowStart).length;
+    if (inWindow >= maxPerWindow) {
+      return res.status(400).json({ error: `You've reached today's limit of ${maxPerWindow} watch${maxPerWindow === 1 ? "" : "es"} for this video. Try again after 24 hours.` });
+    }
+  } else {
+    const existing = await prisma.taskCompletion.findFirst({
+      where: { userId: req.userId, taskId },
+    });
+    if (existing) {
+      return res.status(409).json({ error: "You've already completed this task." });
+    }
+
+    priorCompletionCount = await prisma.taskCompletion.count({ where: { taskId } });
+    if (priorCompletionCount >= 2) {
+      await prisma.task.update({ where: { id: taskId }, data: { active: false } });
+      return res.status(400).json({ error: "This activity has already reached its maximum number of participants." });
+    }
   }
 
   const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
@@ -92,7 +118,7 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
       data: { userId: req.userId!, taskId, payout: reward },
     });
 
-    if (completionCount + 1 >= 2) {
+    if (!isVideo && priorCompletionCount + 1 >= 2) {
       await tx.task.update({ where: { id: taskId }, data: { active: false } });
     }
 
@@ -112,7 +138,7 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
         amount: walletShare,
       },
     });
-await tx.activityLog.create({
+    await tx.activityLog.create({
       data: {
         userId: req.userId!,
         action: "task_completed",

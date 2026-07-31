@@ -208,7 +208,7 @@ router.post("/:id/tasks", requireAuth, requireRole("ADVERTISER"), async (req: Au
   if (campaign.status !== "draft") {
     return res.status(400).json({ error: "Tasks can only be added while the campaign is in draft." });
   }
-const { title, description, type, reward, content } = req.body;
+const { title, description, type, reward, content, maxPerWindow, maxTotal } = req.body;
 
   if (!title || !description || !type || reward == null) {
     return res.status(400).json({ error: "title, description, type, and reward are required." });
@@ -222,6 +222,20 @@ const { title, description, type, reward, content } = req.body;
  if (!content || typeof content.link !== "string" || !content.link.trim()) {
     return res.status(400).json({ error: "A link is required for this activity." });
   }
+
+  let maxPerWindowNum: number | null = null;
+  let maxTotalNum: number | null = null;
+  if (type === "video") {
+    maxPerWindowNum = Number(maxPerWindow) || 1;
+    maxTotalNum = Number(maxTotal) || 5;
+    if (maxPerWindowNum < 1 || maxPerWindowNum > 10) {
+      return res.status(400).json({ error: "Watches per 24 hours must be between 1 and 10." });
+    }
+    if (maxTotalNum < maxPerWindowNum) {
+      return res.status(400).json({ error: "Total watches allowed must be at least as high as the daily limit." });
+    }
+  }
+
   const task = await prisma.task.create({
     data: {
       title,
@@ -229,6 +243,8 @@ const { title, description, type, reward, content } = req.body;
       type,
       reward: rewardNum,
       content: content ?? undefined,
+      maxPerWindow: maxPerWindowNum,
+      maxTotal: maxTotalNum,
       campaignId: campaign.id,
       active: false, // stays inactive until the campaign launches
     },

@@ -78,17 +78,19 @@ model ActivityLog {
 }
 
 model Task {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  type        String
-  reward      Decimal  @db.Decimal(10, 2)
-  active      Boolean  @default(true)
-  content     Json?
-  completions TaskCompletion[]
-  campaign    Campaign? @relation(fields: [campaignId], references: [id])
-  campaignId  String?
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  type         String
+  reward       Decimal  @db.Decimal(10, 2)
+  active       Boolean  @default(true)
+  content      Json?
+  maxPerWindow Int?
+  maxTotal     Int?
+  completions  TaskCompletion[]
+  campaign     Campaign? @relation(fields: [campaignId], references: [id])
+  campaignId   String?
+  createdAt    DateTime @default(now())
 }
 
 model TaskCompletion {
@@ -100,8 +102,6 @@ model TaskCompletion {
   payout    Decimal  @db.Decimal(10, 2)
   responses Json?
   createdAt DateTime @default(now())
-
-  @@unique([userId, taskId])
 }
 model Campaign {
   id           String   @id @default(cuid())
