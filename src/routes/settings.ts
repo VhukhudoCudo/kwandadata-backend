@@ -44,6 +44,7 @@ router.patch("/pricing", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
 const splitSchema = z.object({
   splitAdmin: z.number().min(0),
   splitData: z.number().min(0),
+  splitCampaignObjective: z.number().min(0).optional(),
   vatRate: z.number().min(0).max(100).optional(),
 });
 
@@ -53,18 +54,21 @@ router.patch("/splits", requireAuth, requireRole("ADMIN"), async (req: AuthReque
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { splitAdmin, splitData, vatRate } = parsed.data;
+  const { splitAdmin, splitData, splitCampaignObjective, vatRate } = parsed.data;
 
-  if (splitAdmin + splitData > 100) {
-    return res.status(400).json({ error: "Admin fee and data split together can't exceed 100%." });
+  const currentSettings = await getOrCreateSettings();
+  const campaignObjectivePct = splitCampaignObjective ?? currentSettings.splitCampaignObjective;
+
+  if (splitAdmin + splitData + campaignObjectivePct > 100) {
+    return res.status(400).json({ error: "Admin fee, data split, and campaign objective together can't exceed 100%." });
   }
 
-  await getOrCreateSettings();
   const settings = await prisma.appSettings.update({
     where: { id: "singleton" },
     data: {
       splitAdmin,
       splitData,
+      ...(splitCampaignObjective !== undefined ? { splitCampaignObjective } : {}),
       ...(vatRate !== undefined ? { vatRate } : {}),
     },
   });
