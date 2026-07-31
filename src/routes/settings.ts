@@ -44,6 +44,7 @@ router.patch("/pricing", requireAuth, requireRole("ADMIN"), async (req: AuthRequ
 const splitSchema = z.object({
   splitAdmin: z.number().min(0),
   splitData: z.number().min(0),
+  vatRate: z.number().min(0).max(100).optional(),
 });
 
 // Admin: update the earnings split (wallet share is always the remainder)
@@ -52,7 +53,7 @@ router.patch("/splits", requireAuth, requireRole("ADMIN"), async (req: AuthReque
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { splitAdmin, splitData } = parsed.data;
+  const { splitAdmin, splitData, vatRate } = parsed.data;
 
   if (splitAdmin + splitData > 100) {
     return res.status(400).json({ error: "Admin fee and data split together can't exceed 100%." });
@@ -61,7 +62,11 @@ router.patch("/splits", requireAuth, requireRole("ADMIN"), async (req: AuthReque
   await getOrCreateSettings();
   const settings = await prisma.appSettings.update({
     where: { id: "singleton" },
-    data: { splitAdmin, splitData },
+    data: {
+      splitAdmin,
+      splitData,
+      ...(vatRate !== undefined ? { vatRate } : {}),
+    },
   });
 
   res.json({ message: "Earnings split saved. Applies immediately.", settings });

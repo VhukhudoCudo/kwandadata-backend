@@ -197,12 +197,12 @@ model AppSettings {
   prices             Json     @default("{\"survey\":15,\"video\":5,\"quiz\":8,\"download\":20,\"signup\":25}")
   splitAdmin         Int      @default(20)
   splitData          Int      @default(20)
+  vatRate            Decimal  @default(15) @db.Decimal(5, 2)
   referralBonus      Decimal  @default(5) @db.Decimal(10, 2)
   maintenanceEnabled Boolean  @default(false)
   maintenanceMessage String  @default("")
   updatedAt          DateTime @updatedAt
 }
-
 model Announcement {
   id        String   @id @default(cuid())
   title     String

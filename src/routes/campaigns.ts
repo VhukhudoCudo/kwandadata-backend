@@ -16,9 +16,11 @@ router.post("/", requireAuth, requireRole("ADVERTISER"), async (req: AuthRequest
   if (isNaN(budgetNum) || budgetNum <= 0) {
     return res.status(400).json({ error: "budget must be a positive number." });
   }
+const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  const vatPct = settings ? Number(settings.vatRate) / 100 : 0.15;
 
-const adminFee = budgetNum * 0.20;
-  const vat = budgetNum * 0.15;
+  const adminFee = budgetNum * 0.20;
+  const vat = budgetNum * vatPct;
   const totalCharged = budgetNum + adminFee + vat;
 
   const campaign = await prisma.campaign.create({
