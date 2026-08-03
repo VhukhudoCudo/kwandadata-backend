@@ -12,6 +12,8 @@ import adminRoutes from "./routes/admin.js";
 import campaignWalletRoutes from "./routes/campaign-wallet.js";
 import goalsRoutes from "./routes/goals.js";
 import settingsRoutes from "./routes/settings.js";
+import announcementsRoutes from "./routes/announcements.js";
+import proofOfActionRoutes from "./routes/proof-of-action.js";
 
 
 dotenv.config();
