@@ -12,7 +12,7 @@ import adminRoutes from "./routes/admin.js";
 import campaignWalletRoutes from "./routes/campaign-wallet.js";
 import goalsRoutes from "./routes/goals.js";
 import settingsRoutes from "./routes/settings.js";
-import announcementsRoutes from "./routes/announcements.js";
+
 
 dotenv.config();
 
@@ -41,7 +41,8 @@ app.use(cors({
   },
 }));
 
-app.use(express.json());
+// Default 100kb is too small for base64-encoded receipt photo uploads
+app.use(express.json({ limit: "8mb" }));
 
 // Global rate limit for the whole API
 const globalLimiter = rateLimit({
@@ -74,6 +75,7 @@ app.use("/api/campaign-wallet", campaignWalletRoutes);
 app.use("/api/goals", goalsRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/announcements", announcementsRoutes);
+app.use("/api/proof-of-action", proofOfActionRoutes);
 
 // Global error handler — must be registered last, after all routes
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

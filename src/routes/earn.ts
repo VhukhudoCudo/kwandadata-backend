@@ -91,7 +91,10 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
 
   let campaign = null;
   if (task.campaignId) {
-    campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
+    campaign = await prisma.campaign.findUnique({
+      where: { id: task.campaignId },
+      include: { advertiser: { select: { company: true, firstName: true, lastName: true } } },
+    });
     if (!campaign || campaign.status !== "active") {
       return res.status(400).json({ error: "This campaign is no longer active." });
     }
@@ -104,7 +107,8 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
   const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
   const splitAdminPct = settings ? settings.splitAdmin / 100 : 0.20;
   const splitDataPct = settings ? settings.splitData / 100 : 0.20;
-  const splitCampaignPct = settings ? settings.splitCampaignObjective / 100 : 0.20;
+const splitCampaignPct = settings ? settings.splitCampaignObjective / 100 : 0.20;
+  const splitProofOfActionPct = settings ? settings.splitProofOfAction / 100 : 0.10;
 
   const reward = Number(task.reward);
   const adminFee = reward * splitAdminPct;
@@ -112,7 +116,10 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
   // Campaign tasks reserve a further share for the Campaign Objective Wallet;
   // generic tasks have no company to attribute that share to, so it all goes to the main wallet.
   const campaignShare = campaign ? reward * splitCampaignPct : 0;
-  const walletShare = reward - adminFee - dataShare - campaignShare;
+  // Campaign VIDEO tasks additionally carve out a Proof of Campaign Action share, held pending
+  // until the user uploads a matching purchase receipt (or it expires after 30 days).
+  const proofShare = campaign && isVideo ? reward * splitProofOfActionPct : 0;
+  const walletShare = reward - adminFee - dataShare - campaignShare - proofShare;
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.taskCompletion.create({
@@ -122,12 +129,12 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
     if (!isVideo && priorCompletionCount + 1 >= 2) {
       await tx.task.update({ where: { id: taskId }, data: { active: false } });
     }
-
-    const updatedWallet = await tx.wallet.update({
+const updatedWallet = await tx.wallet.update({
       where: { id: wallet.id },
       data: {
         balance: { increment: walletShare },
         dataBalance: { increment: dataShare },
+        bonusBalance: { increment: proofShare },
       },
     });
 
@@ -147,12 +154,27 @@ router.post("/tasks/:id/complete", requireAuth, async (req: AuthRequest, res) =>
       },
     });
 
-    if (campaign) {
+if (campaign) {
       await tx.campaignWallet.upsert({
         where: { userId_advertiserId: { userId: req.userId!, advertiserId: campaign.advertiserId } },
         create: { userId: req.userId!, advertiserId: campaign.advertiserId, balance: campaignShare },
         update: { balance: { increment: campaignShare } },
       });
+
+      if (isVideo && proofShare > 0) {
+        const brandName = campaign.advertiser.company
+          || `${campaign.advertiser.firstName} ${campaign.advertiser.lastName}`;
+        await tx.proofOfActionEntry.create({
+          data: {
+            userId: req.userId!,
+            campaignId: campaign.id,
+            advertiserId: campaign.advertiserId,
+            brandName,
+            amount: proofShare,
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          },
+        });
+      }
 
       const newSpent = Number(campaign.spent) + reward;
       const isExhausted = newSpent >= Number(campaign.budget);
