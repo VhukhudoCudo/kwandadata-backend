@@ -39,31 +39,10 @@ model User {
 campaigns       Campaign[]
   campaignWallets         CampaignWallet[] @relation("CampaignWalletUser")
   campaignWalletsSponsored CampaignWallet[] @relation("CampaignWalletAdvertiser")
-
-// Per-video-completion pending amount ("Proof of Campaign Action" wallet), funded by 10% of
-// campaign video-task earnings. Held pending, tagged to the campaign's advertiser/brand, until
-// the user uploads a matching purchase receipt (auto-verified via Claude vision) or it expires
-// after 30 days and forfeits to admin, same as the admin fee.
-model ProofOfActionEntry {
-  id           String    @id @default(cuid())
-  user         User      @relation(fields: [userId], references: [id])
-  userId       String
-  campaign     Campaign  @relation(fields: [campaignId], references: [id])
-  campaignId   String
-  advertiserId String
-  brandName    String
-  amount       Decimal   @db.Decimal(10, 2)
-  status       String    @default("pending") // pending -> released | forfeited
-  releasedAt   DateTime?
-  forfeitedAt  DateTime?
-  expiresAt    DateTime
-  createdAt    DateTime  @default(now())
-}
-
- campaignCodes   CampaignCode[]
+  campaignCodes   CampaignCode[]
   goals           Goal[]
   goalCodes       GoalCode[]
- proofOfActionEntries ProofOfActionEntry[]
+  proofOfActionEntries ProofOfActionEntry[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -175,6 +154,26 @@ model CampaignWallet {
   updatedAt    DateTime @updatedAt
 
   @@unique([userId, advertiserId])
+}
+
+// Per-video-completion pending amount ("Proof of Campaign Action" wallet), funded by 10% of
+// campaign video-task earnings. Held pending, tagged to the campaign's advertiser/brand, until
+// the user uploads a matching purchase receipt (auto-verified via Claude vision) or it expires
+// after 30 days and forfeits to admin, same as the admin fee.
+model ProofOfActionEntry {
+  id           String    @id @default(cuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String
+  campaign     Campaign  @relation(fields: [campaignId], references: [id])
+  campaignId   String
+  advertiserId String
+  brandName    String
+  amount       Decimal   @db.Decimal(10, 2)
+  status       String    @default("pending") // pending -> released | forfeited
+  releasedAt   DateTime?
+  forfeitedAt  DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
 }
 
 // A redemption code drawn from a CampaignWallet balance, confirmed in-store by the advertiser
