@@ -422,4 +422,27 @@ router.patch("/campaigns/:id/reject", requireAuth, requireRole("ADMIN"), async (
   res.json({ message: "Campaign rejected.", campaign: updated });
 });
 
+// Real activity feed for the Admin Activities screen — backed by ActivityLog, which is
+// written every time a user completes a task (see earn.ts). No fabricated "completion rate":
+// there's no tracked concept of an attempted-but-failed task, so we surface honest counts instead.
+router.get("/activities", requireAuth, requireRole("ADMIN"), async (req: AuthRequest, res) => {
+  const [total, todayCount, recent] = await Promise.all([
+    prisma.activityLog.count(),
+    prisma.activityLog.count({
+      where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    }),
+    prisma.activityLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { user: { select: { firstName: true, lastName: true } } },
+    }),
+  ]);
+
+  res.json({
+    totalActivities: total,
+    activitiesLast24h: todayCount,
+    activities: recent,
+  });
+});
+
 export default router;
