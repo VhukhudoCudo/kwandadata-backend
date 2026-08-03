@@ -22,7 +22,7 @@ router.get("/tasks", requireAuth, async (req: AuthRequest, res) => {
         select: {
           id: true,
           title: true,
-          advertiser: { select: { firstName: true, lastName: true } },
+         advertiser: { select: { company: true, firstName: true, lastName: true } },
         },
       },
     },

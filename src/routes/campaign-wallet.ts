@@ -19,7 +19,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const wallets = await prisma.campaignWallet.findMany({
     where: { userId: req.userId },
     include: {
-      advertiser: { select: { id: true, firstName: true, lastName: true } },
+     advertiser: { select: { id: true, company: true, firstName: true, lastName: true } },
     },
     orderBy: { updatedAt: "desc" },
   });
