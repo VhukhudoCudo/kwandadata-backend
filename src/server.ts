@@ -55,15 +55,6 @@ const globalLimiter = rateLimit({
 });
 app.use("/api", globalLimiter);
 
-// Stricter limit on auth routes to slow down credential stuffing / brute force
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many auth attempts. Please try again later." },
-});
-app.use("/api/auth", authLimiter);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
