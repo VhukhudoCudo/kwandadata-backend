@@ -6,9 +6,10 @@ import { orderAirtimeVoucher, checkVoucherUsed } from "../lib/airtime.js";
 const router = Router();
 
 const redeemSchema = z.object({
-  type: z.enum(["airtime", "data", "cash"]),
+  type: z.enum(["airtime", "cash"]),
   amount: z.number().positive(),
   details: z.record(z.string()).optional(),
+  source: z.enum(["hello", "airtimeWallet"]).optional(),
 });
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
@@ -16,14 +17,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { type, amount, details } = parsed.data;
+  const { type, amount, details, source } = parsed.data;
 
   const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
   if (!wallet) {
     return res.status(404).json({ error: "Wallet not found." });
   }
 
-  const balanceField = type === "data" ? "dataBalance" : "balance";
+  const balanceField = source === "airtimeWallet" ? "dataBalance" : "balance";
   const available = Number(wallet[balanceField]);
 
   if (amount > available) {
