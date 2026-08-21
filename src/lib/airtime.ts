@@ -100,6 +100,25 @@ export async function orderAirtimeVoucher(value: number): Promise<AirtimeVoucher
     pin: v.pin,
     value: v.value,
   }));
-
   return { success: true, reference, vouchers, raw: fetchResult.json };
+}
+
+/**
+ * Checks whether the voucher(s) in a given order have actually been dialed/redeemed yet,
+ * by re-fetching the order and looking at AllNetAirtime's usage statistics. Since we only
+ * ever order quantity 1, "used > 0" reliably means this specific voucher was redeemed.
+ * Returns null (rather than false) if the check itself couldn't be completed, so callers
+ * can tell "confirmed still unused" apart from "couldn't confirm right now".
+ */
+export async function checkVoucherUsed(reference: string): Promise<boolean | null> {
+  if (!ALLNETAIRTIME_API_KEY) return null;
+  try {
+    const result = await callAllNetAirtime("/api/fetch_order.php", { reference });
+    if (!result.ok || !result.json || result.json.status === "error") return null;
+    const stats = result.json.data?.statistics;
+    return typeof stats?.used === "number" ? stats.used > 0 : null;
+  } catch (err) {
+    console.error("Failed to check voucher usage status:", err);
+    return null;
+  }
 }
